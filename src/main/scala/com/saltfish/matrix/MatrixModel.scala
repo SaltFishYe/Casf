@@ -1,8 +1,8 @@
 package com.saltfish.matrix
 
 import com.saltfish.entity.{FactorMod, FactorStandardValue, MatrixElement, SimilarityValue, StandardElement, VectorMod}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.functions.{coalesce, collect_list, concat_ws, lit, max, pow, sqrt, sum}
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.functions.{coalesce, lit, sum}
 
 case class MatrixModel(sparkSession: SparkSession,
                        var matrixElement: Dataset[MatrixElement],
