@@ -9,7 +9,7 @@ import scala.collection.mutable
 import scala.collection.mutable._
 
 
-class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x") {
+case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x") {
 
   import sparkSession.implicits._
 
