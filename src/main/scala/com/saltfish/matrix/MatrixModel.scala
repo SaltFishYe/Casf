@@ -10,7 +10,7 @@ case class MatrixModel(sparkSession: SparkSession,
                        var factorMod: Dataset[FactorMod],
                        var vectorMod: Dataset[VectorMod],
                        var factorStandardValue: Dataset[FactorStandardValue],
-                       var axis: String = "x") {
+                       var axis: String = "y") {
 
   import sparkSession.implicits._
 
