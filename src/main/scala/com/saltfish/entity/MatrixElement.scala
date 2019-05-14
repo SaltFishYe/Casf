@@ -1,3 +1,3 @@
 package com.saltfish.entity
 
-case class MatrixElement(x: String, y: String, value: BigInt)
+case class MatrixElement(y: String, x: String, value: BigInt)
