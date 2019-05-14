@@ -4,13 +4,13 @@ import com.saltfish.entity.{FactorMod, FactorStandardValue, MatrixElement, Simil
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.{coalesce, collect_list, concat_ws, lit, max, pow, sqrt, sum}
 
-class MatrixModel(sparkSession: SparkSession,
-                  var matrixElement: Dataset[MatrixElement],
-                  var standardElement: Dataset[StandardElement],
-                  var factorMod: Dataset[FactorMod],
-                  var vectorMod: Dataset[VectorMod],
-                  var factorStandardValue: Dataset[FactorStandardValue],
-                  var axis: String = "x") {
+case class MatrixModel(sparkSession: SparkSession,
+                       var matrixElement: Dataset[MatrixElement],
+                       var standardElement: Dataset[StandardElement],
+                       var factorMod: Dataset[FactorMod],
+                       var vectorMod: Dataset[VectorMod],
+                       var factorStandardValue: Dataset[FactorStandardValue],
+                       var axis: String = "x") {
 
   import sparkSession.implicits._
 
@@ -20,19 +20,37 @@ class MatrixModel(sparkSession: SparkSession,
   }
 
   def allSimilarityValue: Dataset[SimilarityValue] = {
-    val allSimilarity: Dataset[SimilarityValue] = factorStandardValue.groupBy($"vector1", $"vector2")
+    computeSimilarity(factorStandardValue, factorMod)
+  }
+
+  def similarity(vectorList: Array[String]): Dataset[SimilarityValue] = {
+    val forecasetVector = sparkSession.sparkContext.broadcast[Array[String]](vectorList).value
+
+    val tempFactorMod = factorMod.rdd
+      .filter(
+        factorModRdd => (forecasetVector.contains(factorModRdd.vector1)
+          && forecasetVector.contains(factorModRdd.vector2))
+      )
+      .toDS()
+
+    computeSimilarity(factorStandardValue, tempFactorMod)
+  }
+
+  private def computeSimilarity(factorStandardValueParam: Dataset[FactorStandardValue],
+                                factorModParam: Dataset[FactorMod]): Dataset[SimilarityValue] = {
+    val similarity: Dataset[SimilarityValue] = factorStandardValueParam.groupBy($"vector1", $"vector2")
       .agg(
         sum($"value1" * $"value2") as "numerator"
       ).toDF("x", "y", "numerator")
       .join(
-        factorMod, factorMod("vector1") === $"x"
-          and factorMod("vector2") === $"y"
+        factorModParam, factorModParam("vector1") === $"x"
+          and factorModParam("vector2") === $"y"
         , "right"
       )
-      .select(factorMod("vector1"), factorMod("vector2"),
+      .select(factorModParam("vector1"), factorModParam("vector2"),
         coalesce($"numerator" / ($"mod1" * $"mod2"), lit(0.0d)))
-      .toDF("vector1","vector2","simlarity_value")
+      .toDF("vector1", "vector2", "simlarity_value")
       .as[SimilarityValue]
-    allSimilarity
+    similarity
   }
 }
