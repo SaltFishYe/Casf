@@ -123,13 +123,13 @@ class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x") {
     maxValue
   }
 
-  def matrixModel(matrixElement: Dataset[MatrixElement]): MatrixModel = {
+  def simpleMatrixModel(matrixElement: Dataset[MatrixElement]): MatrixModel = {
     val maxValue = genMaxValue(matrixElement)
     val standardElement = genStandardElement(maxValue, matrixElement)
     val vectorMod = genVectorMod(standardElement)
     val factorMod = genFactorMod(vectorMod)
     val factorStandardValue = genFactorStandardValue(vectorMod, standardElement)
-    val matrixModel = new MatrixModel(sparkSession,
+    val matrixModel = MatrixModel(sparkSession,
       matrixElement,
       standardElement,
       factorMod,
