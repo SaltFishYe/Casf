@@ -98,7 +98,7 @@ object KeyWordsDemo {
       )
       .as[MatrixElement]
 
-    val analyse = new MatrixCosineAnalyse(sparkSession, axis = "x")
+    val analyse = MatrixCosineAnalyse(sparkSession, axis = "y")
     val matrixModel = analyse.simpleMatrixModel(words1.unionAll(words2).unionAll(words3))
     matrixModel.allSimilarityValue.show()
 
