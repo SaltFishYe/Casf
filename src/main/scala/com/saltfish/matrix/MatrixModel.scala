@@ -19,10 +19,21 @@ case class MatrixModel(sparkSession: SparkSession,
     else "x"
   }
 
+  /**
+    * 返回所有指定轴侧向量互相间相似度
+    *
+    * @return
+    */
   def allSimilarityValue: Dataset[SimilarityValue] = {
     computeSimilarity(factorStandardValue, factorMod)
   }
 
+  /**
+    * 返回指定轴侧指定向量互相间相似度
+    *
+    * @param vectorList
+    * @return
+    */
   def similarity(vectorList: Array[String]): Dataset[SimilarityValue] = {
     val forecasetVector = sparkSession.sparkContext.broadcast[Array[String]](vectorList).value
 
@@ -36,6 +47,13 @@ case class MatrixModel(sparkSession: SparkSession,
     computeSimilarity(factorStandardValue, tempFactorMod)
   }
 
+  /**
+    * 根据两两关联标准元素值和两两关联向量模计算相似度
+    *
+    * @param factorStandardValueParam
+    * @param factorModParam
+    * @return
+    */
   private def computeSimilarity(factorStandardValueParam: Dataset[FactorStandardValue],
                                 factorModParam: Dataset[FactorMod]): Dataset[SimilarityValue] = {
     val similarity: Dataset[SimilarityValue] = factorStandardValueParam.groupBy($"vector1", $"vector2")
