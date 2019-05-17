@@ -1,15 +1,14 @@
 package com.saltfish.matrix
 
-import com.saltfish.entity.{FactorMod, FactorStandardValue, MatrixElement, SimilarityValue, StandardElement, VectorMod}
+import com.saltfish.entity.{FactorMod, FactorNormalizedValue, MatrixElement, NormalizedElement, SimilarityValue, VectorMod}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.functions.{coalesce, lit, sum}
 
 case class MatrixModel(sparkSession: SparkSession,
                        var matrixElement: Dataset[MatrixElement],
-                       var standardElement: Dataset[StandardElement],
+                       var normalizedElement: Dataset[NormalizedElement],
                        var factorMod: Dataset[FactorMod],
-                       var vectorMod: Dataset[VectorMod],
-                       var factorStandardValue: Dataset[FactorStandardValue],
+                       var factorNormalizedValue: Dataset[FactorNormalizedValue],
                        var axis: String = "y") {
 
   import sparkSession.implicits._
@@ -25,7 +24,7 @@ case class MatrixModel(sparkSession: SparkSession,
     * @return
     */
   def allSimilarityValue: Dataset[SimilarityValue] = {
-    computeSimilarity(factorStandardValue, factorMod)
+    computeSimilarity(factorNormalizedValue, factorMod)
   }
 
   /**
@@ -44,19 +43,20 @@ case class MatrixModel(sparkSession: SparkSession,
       )
       .toDS()
 
-    computeSimilarity(factorStandardValue, tempFactorMod)
+    computeSimilarity(factorNormalizedValue, tempFactorMod)
   }
 
   /**
     * 根据两两关联标准元素值和两两关联向量模计算相似度
     *
-    * @param factorStandardValueParam
+    * @param factorNormalizedValueParam
     * @param factorModParam
     * @return
     */
-  private def computeSimilarity(factorStandardValueParam: Dataset[FactorStandardValue],
+  private def computeSimilarity(factorNormalizedValueParam: Dataset[FactorNormalizedValue],
                                 factorModParam: Dataset[FactorMod]): Dataset[SimilarityValue] = {
-    val similarity: Dataset[SimilarityValue] = factorStandardValueParam.groupBy($"vector1", $"vector2")
+    val similarity: Dataset[SimilarityValue] = factorNormalizedValueParam
+      .groupBy($"vector1", $"vector2")
       .agg(
         sum($"value1" * $"value2") as "numerator"
       ).toDF("x", "y", "numerator")

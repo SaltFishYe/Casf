@@ -1,15 +1,18 @@
 package com.saltfish.analyse
 
-import com.saltfish.entity.{FactorMod, FactorStandardValue, MatrixElement, MaxValue, StandardElement, VectorMod}
-import com.saltfish.matrix.{MatrixModel}
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import com.saltfish.entity.{FactorMod, FactorNormalizedValue, MatrixElement, MaxValue, NormalizedElement, VectorMod}
+import com.saltfish.matrix.MatrixModel
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 
 import scala.collection.mutable
 import scala.collection.mutable._
 
 
-case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x") {
+case class MatrixCosineAnalyse(sparkSession: SparkSession,
+                               var axis: String = "x",
+                               var omitRadio: Double = 0.02d,
+                               var normalizedType: String = "max") {
 
   import sparkSession.implicits._
 
@@ -19,18 +22,18 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x
   }
 
   /**
-    * 返回两两对应的指定轴侧各向量的模
+    * 返回两两对应的指定轴侧各向量的含全元素计算的模
     *
     * @param vectorMod 指定轴侧模
     * @return Dataset[FactorMod] (vector1,vector2,mod1,mod2)
     */
-  def genFactorMod(vectorMod: Dataset[VectorMod]): Dataset[FactorMod] = {
+  def genFactorAllElementMod(vectorMod: Dataset[VectorMod]): Dataset[FactorMod] = {
     val factorMod: Dataset[FactorMod] = vectorMod.agg(
       collect_list(concat_ws(":", vectorMod("vector"), vectorMod("mod"))) as "vector_mod_list"
     )
       .flatMap {
         row => {
-          var modbuffer = ArrayBuffer[(String, String, Double, Double)]()
+          var modBuffer = ArrayBuffer[(String, String, Double, Double)]()
           val vector_mod_list = row.getAs[mutable.WrappedArray[String]](0)
           for (i <- 0 to vector_mod_list.size - 2) {
             val vector_mod1 = vector_mod_list(i).split(":")
@@ -41,16 +44,28 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x
               val vector2 = vector_mod2(0)
               val mod2 = vector_mod2(1).toDouble
               if (vector1.compareTo(vector2) > 0) {
-                modbuffer += ((vector1, vector2, mod1, mod2))
+                modBuffer += ((vector1, vector2, mod1, mod2))
               } else {
-                modbuffer += ((vector2, vector1, mod2, mod1))
+                modBuffer += ((vector2, vector1, mod2, mod1))
               }
             }
           }
-          modbuffer
+          modBuffer
         }
       }.toDF("vector1", "vector2", "mod1", "mod2")
       .as[FactorMod]
+    factorMod
+  }
+
+  def genFactorMod(factorNormalizedValue: Dataset[FactorNormalizedValue]): Dataset[FactorMod] = {
+    val factorMod: Dataset[FactorMod] = factorNormalizedValue.groupBy($"vector1", $"vector2")
+      .agg(
+        sqrt(sum(pow($"value1", 2))) as "mod1",
+        sqrt(sum(pow($"value2", 2))) as "mod2"
+      )
+      .toDF("vector1", "vector2", "mod1", "mod2")
+      .as[FactorMod]
+
     factorMod
   }
 
@@ -60,58 +75,86 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x
     * @param maxValue      指定轴侧向量元素的最大值
     * @param matrixElement 元素值
     * @param omitRadio     省略阈值，低于此值的省略词元素；小于0时不省略
-    * @return Dataset[StandardElement] (y,x,standard_value)
+    * @return Dataset[normalizedElement] (y,x,normalized_value)
     */
-  def genStandardElement(maxValue: Dataset[MaxValue],
-                         matrixElement: Dataset[MatrixElement],
-                         omitRadio: Double = 0.02d): Dataset[StandardElement] = {
-    val temnpStandardElement = maxValue.join(matrixElement, maxValue("axis") === matrixElement(axis))
+  def genNormalizedElement(maxValue: Dataset[MaxValue],
+                           matrixElement: Dataset[MatrixElement],
+                           omitRadio: Double = 0.02d): Dataset[NormalizedElement] = {
+    val tempNormalizedElement = maxValue.join(matrixElement, maxValue("axis") === matrixElement(axis))
     if (omitRadio > 0.0d) {
-      temnpStandardElement.where(matrixElement("value") / maxValue("max_value") > omitRadio)
+      tempNormalizedElement.where(matrixElement("value") / maxValue("max_value") > omitRadio)
     }
 
-    val standardElement = temnpStandardElement.select(
+    val normalizedElement = tempNormalizedElement.select(
       matrixElement(axis),
       matrixElement(forecast_axis),
-      matrixElement("value") / maxValue("max_value").cast("Double") as "standard_value")
-      .as[StandardElement]
-    standardElement
+      matrixElement("value") / maxValue("max_value").cast("Double") as "normalized_value")
+      .as[NormalizedElement]
+    normalizedElement
   }
 
   /**
     * 返回指定轴侧向量模
     *
-    * @param standardElement 标准值化元素值
+    * @param normalizedElement 标准值化元素值
     * @return Dataset[VectorMod] (vector,mod)
     */
-  def genVectorMod(standardElement: Dataset[StandardElement]): Dataset[VectorMod] = {
+  def genVectorMod(normalizedElement: Dataset[NormalizedElement]): Dataset[VectorMod] = {
 
-    val vectorMod: Dataset[VectorMod] = standardElement.groupBy(axis)
+    val vectorMod: Dataset[VectorMod] = normalizedElement.groupBy(axis)
       .agg(
-        sqrt(sum(pow("standard_value", 2.0d))) as "mod"
+        sqrt(sum(pow("normalized_value", 2.0d))) as "mod"
       ).toDF("vector", "mod")
       .as[VectorMod]
 
     vectorMod
   }
 
+  def genFactorMod2(normalizedElement: Dataset[NormalizedElement]): Dataset[FactorMod] = {
+
+    val vectorMod = genVectorMod(normalizedElement)
+
+    val factorMod: Dataset[FactorMod] = vectorMod.agg(
+      collect_list(concat_ws(":", vectorMod("vector"), vectorMod("mod"))) as "vector_mod_list"
+    )
+      .flatMap {
+        row => {
+          val modBuffer = ArrayBuffer[(String, String, Double, Double)]()
+          val vector_mod_list = row.getAs[mutable.WrappedArray[String]](0)
+          for (i <- 0 to vector_mod_list.size - 2) {
+            val vector_mod1 = vector_mod_list(i).split(":")
+            val vector1 = vector_mod1(0)
+            val mod1 = vector_mod1(1).toDouble
+            for (k <- i + 1 to vector_mod_list.size - 1) {
+              val vector_mod2 = vector_mod_list(k).split(":")
+              val vector2 = vector_mod2(0)
+              val mod2 = vector_mod2(1).toDouble
+              if (vector1.compareTo(vector2) > 0) {
+                modBuffer += ((vector1, vector2, mod1, mod2))
+              } else {
+                modBuffer += ((vector2, vector1, mod2, mod1))
+              }
+            }
+          }
+          modBuffer
+        }
+      }.toDF("vector1", "vector2", "mod1", "mod2")
+      .as[FactorMod]
+    factorMod
+  }
+
   /**
     * 返回两两对应的标准值化元素值
     *
-    * @param vectorMod       指定轴侧向量模
-    * @param standardElement 标准值化的向量元素
-    * @return Dataset[FactorStandardValue] (vector1,vector2,forecast_axis,value1,value2)
+    * @param normalizedElement 标准值化的向量元素
+    * @return Dataset[FactorNormalizedValue] (vector1,vector2,forecast_axis,value1,value2)
     */
-  def genFactorStandardValue(vectorMod: Dataset[VectorMod],
-                             standardElement: Dataset[StandardElement]): Dataset[FactorStandardValue] = {
-    val factorStandardValue: Dataset[FactorStandardValue] = vectorMod.join(standardElement, vectorMod("vector") === standardElement(axis))
-      .select(
-        standardElement(forecast_axis),
-        concat_ws(":", standardElement(axis), standardElement("standard_value")) as "vector_value"
-      )
+  def genFactorNormalizedValue(normalizedElement: Dataset[NormalizedElement]): Dataset[FactorNormalizedValue] = {
+
+    val factorNormalizedValue: Dataset[FactorNormalizedValue] = normalizedElement
       .groupBy(forecast_axis)
       .agg(
-        collect_list("vector_value") as "vector_value_list"
+        collect_list(concat_ws(":", normalizedElement(axis), normalizedElement("normalized_value"))) as "vector_value_list"
       )
       .flatMap {
         row => {
@@ -137,9 +180,9 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x
         }
       }
       .toDF("vector1", "vector2", "forecast_axis", "value1", "value2")
-      .as[FactorStandardValue]
+      .as[FactorNormalizedValue]
 
-    factorStandardValue
+    factorNormalizedValue
   }
 
   /**
@@ -156,18 +199,28 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession, var axis: String = "x
     maxValue
   }
 
-  def simpleMatrixModel(matrixElement: Dataset[MatrixElement]): MatrixModel = {
+  def simpleMatrixModel(matrixElement: Dataset[MatrixElement],
+                        isSparse: Boolean = true): MatrixModel = {
+    matrixElement.persist()
     val maxValue = genMaxValue(matrixElement)
-    val standardElement = genStandardElement(maxValue, matrixElement)
-    val vectorMod = genVectorMod(standardElement)
-    val factorMod = genFactorMod(vectorMod)
-    val factorStandardValue = genFactorStandardValue(vectorMod, standardElement)
-    val matrixModel = MatrixModel(sparkSession,
+    val normalizedElement = genNormalizedElement(maxValue, matrixElement)
+    matrixElement.unpersist()
+    val factorNormalizedValue = genFactorNormalizedValue(normalizedElement)
+    factorNormalizedValue.persist()
+    val factorMod: Dataset[FactorMod] =
+      if (isSparse) {
+        genFactorMod(factorNormalizedValue)
+      } else {
+        genFactorMod2(normalizedElement)
+      }
+
+    factorMod.persist()
+    val matrixModel = MatrixModel(
+      sparkSession,
       matrixElement,
-      standardElement,
+      normalizedElement,
       factorMod,
-      vectorMod,
-      factorStandardValue)
+      factorNormalizedValue)
 
     matrixModel
   }
