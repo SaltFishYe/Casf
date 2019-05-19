@@ -1,6 +1,6 @@
 package com.saltfish.matrix
 
-import com.saltfish.entity.{FactorMod, FactorNormalizedValue, MatrixElement, NormalizedElement, SimilarityValue, VectorMod}
+import com.saltfish.entity.{FactorMod, FactorNormalizedValue, MatrixElement, NormalizedElement, SimilarityValue}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.functions.{coalesce, lit, sum}
 
@@ -30,7 +30,7 @@ case class MatrixModel(sparkSession: SparkSession,
   /**
     * 返回指定轴侧指定向量互相间相似度
     *
-    * @param vectorList
+    * @param vectorList 计算的向量集合
     * @return
     */
   def similarity(vectorList: Array[String]): Dataset[SimilarityValue] = {
@@ -49,8 +49,8 @@ case class MatrixModel(sparkSession: SparkSession,
   /**
     * 根据两两关联标准元素值和两两关联向量模计算相似度
     *
-    * @param factorNormalizedValueParam
-    * @param factorModParam
+    * @param factorNormalizedValueParam 两两对应的归一化元素值
+    * @param factorModParam             两两对应的向量元素模
     * @return
     */
   private def computeSimilarity(factorNormalizedValueParam: Dataset[FactorNormalizedValue],
