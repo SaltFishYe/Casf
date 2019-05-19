@@ -34,12 +34,12 @@ case class MatrixModel(sparkSession: SparkSession,
     * @return
     */
   def similarity(vectorList: Array[String]): Dataset[SimilarityValue] = {
-    val forecasetVector = sparkSession.sparkContext.broadcast[Array[String]](vectorList).value
+    val forecastVector = sparkSession.sparkContext.broadcast[Array[String]](vectorList).value
 
     val tempFactorMod = factorMod.rdd
       .filter(
-        factorModRdd => (forecasetVector.contains(factorModRdd.vector1)
-          && forecasetVector.contains(factorModRdd.vector2))
+        factorModRdd => (forecastVector.contains(factorModRdd.vector1)
+          && forecastVector.contains(factorModRdd.vector2))
       )
       .toDS()
 
@@ -67,7 +67,7 @@ case class MatrixModel(sparkSession: SparkSession,
       )
       .select(factorModParam("vector1"), factorModParam("vector2"),
         coalesce($"numerator" / ($"mod1" * $"mod2"), lit(0.0d)))
-      .toDF("vector1", "vector2", "simlarity_value")
+      .toDF("vector1", "vector2", "similarity_value")
       .as[SimilarityValue]
     similarity
   }
