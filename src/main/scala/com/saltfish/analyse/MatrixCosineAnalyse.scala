@@ -35,11 +35,11 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
         row => {
           var modBuffer = ArrayBuffer[(String, String, Double, Double)]()
           val vector_mod_list = row.getAs[mutable.WrappedArray[String]](0)
-          for (i <- 0 to vector_mod_list.size - 2) {
+          for (i <- 0 until vector_mod_list.size - 1) {
             val vector_mod1 = vector_mod_list(i).split(":")
             val vector1 = vector_mod1(0)
             val mod1 = vector_mod1(1).toDouble
-            for (k <- i + 1 to vector_mod_list.size - 1) {
+            for (k <- i + 1 until vector_mod_list.size) {
               val vector_mod2 = vector_mod_list(k).split(":")
               val vector2 = vector_mod2(0)
               val mod2 = vector_mod2(1).toDouble
@@ -57,6 +57,14 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
     factorMod
   }
 
+  /**
+    * 将二维元素矩阵作为稀疏矩阵，
+    * 只计算两向量之间存在的元素，忽略factorNormalizedValue中缺少的矩阵元素
+    * 生成两两对应的向量模，且某一向量和不同的向量构成组合其模不一致
+    *
+    * @param factorNormalizedValue 两两对应的归一化元素值
+    * @return
+    */
   def genFactorMod(factorNormalizedValue: Dataset[FactorNormalizedValue]): Dataset[FactorMod] = {
     val factorMod: Dataset[FactorMod] = factorNormalizedValue.groupBy($"vector1", $"vector2")
       .agg(
@@ -96,7 +104,7 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
   /**
     * 返回指定轴侧向量模
     *
-    * @param normalizedElement 标准值化元素值
+    * @param normalizedElement 归一化元素值
     * @return Dataset[VectorMod] (vector,mod)
     */
   def genVectorMod(normalizedElement: Dataset[NormalizedElement]): Dataset[VectorMod] = {
@@ -110,6 +118,14 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
     vectorMod
   }
 
+  /**
+    * 将二维矩阵当做含有全元素矩阵，
+    * normalizedElement中缺少的矩阵中的元素当做0处理，
+    * 生成两两对应的向量模，且某一向量无论与任意向量构成组合，其mod都一致。
+    *
+    * @param normalizedElement 归一化元素值
+    * @return
+    */
   def genFactorMod2(normalizedElement: Dataset[NormalizedElement]): Dataset[FactorMod] = {
 
     val vectorMod = genVectorMod(normalizedElement)
@@ -121,11 +137,11 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
         row => {
           val modBuffer = ArrayBuffer[(String, String, Double, Double)]()
           val vector_mod_list = row.getAs[mutable.WrappedArray[String]](0)
-          for (i <- 0 to vector_mod_list.size - 2) {
+          for (i <- 0 until vector_mod_list.size - 1) {
             val vector_mod1 = vector_mod_list(i).split(":")
             val vector1 = vector_mod1(0)
             val mod1 = vector_mod1(1).toDouble
-            for (k <- i + 1 to vector_mod_list.size - 1) {
+            for (k <- i + 1 until vector_mod_list.size) {
               val vector_mod2 = vector_mod_list(k).split(":")
               val vector2 = vector_mod2(0)
               val mod2 = vector_mod2(1).toDouble
@@ -144,9 +160,9 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
   }
 
   /**
-    * 返回两两对应的标准值化元素值
+    * 返回两两对应的归一化元素值
     *
-    * @param normalizedElement 标准值化的向量元素
+    * @param normalizedElement 归一化的向量元素
     * @return Dataset[FactorNormalizedValue] (vector1,vector2,forecast_axis,value1,value2)
     */
   def genFactorNormalizedValue(normalizedElement: Dataset[NormalizedElement]): Dataset[FactorNormalizedValue] = {
@@ -161,11 +177,11 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
           var factorBuffer = ArrayBuffer[(String, String, String, Double, Double)]()
           val forecast_axis = row.getString(0)
           val vector_value_list = row.getAs[mutable.WrappedArray[String]](1)
-          for (i <- 0 to vector_value_list.size - 2) {
+          for (i <- 0 until vector_value_list.size - 1) {
             val vector_value1 = vector_value_list(i).split(":")
             val vector1 = vector_value1(0)
             val value1 = vector_value1(1).toDouble
-            for (k <- i + 1 to vector_value_list.size - 1) {
+            for (k <- i + 1 until vector_value_list.size) {
               val vector_value2 = vector_value_list(k).split(":")
               val vector2 = vector_value2(0)
               val value2 = vector_value2(1).toDouble
