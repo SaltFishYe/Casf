@@ -38,8 +38,8 @@ case class MatrixModel(sparkSession: SparkSession,
 
     val tempFactorMod = factorMod.rdd
       .filter(
-        factorModRdd => (forecastVector.contains(factorModRdd.vector1)
-          && forecastVector.contains(factorModRdd.vector2))
+        factorModRdd => (forecastVector.contains(factorModRdd.vector0)
+          && forecastVector.contains(factorModRdd.vector1))
       )
       .toDS()
 
@@ -56,18 +56,18 @@ case class MatrixModel(sparkSession: SparkSession,
   private def computeSimilarity(factorNormalizedValueParam: Dataset[FactorNormalizedValue],
                                 factorModParam: Dataset[FactorMod]): Dataset[SimilarityValue] = {
     val similarity: Dataset[SimilarityValue] = factorNormalizedValueParam
-      .groupBy($"vector1", $"vector2")
+      .groupBy($"vector0", $"vector1")
       .agg(
         sum($"value1" * $"value2") as "numerator"
       ).toDF("x", "y", "numerator")
       .join(
-        factorModParam, factorModParam("vector1") === $"x"
-          and factorModParam("vector2") === $"y"
+        factorModParam, factorModParam("vector0") === $"x"
+          and factorModParam("vector1") === $"y"
         , "right"
       )
-      .select(factorModParam("vector1"), factorModParam("vector2"),
+      .select(factorModParam("vector0"), factorModParam("vector1"),
         coalesce($"numerator" / ($"mod1" * $"mod2"), lit(0.0d)))
-      .toDF("vector1", "vector2", "similarity_value")
+      .toDF("vector0", "vector1", "similarity_value")
       .as[SimilarityValue]
     similarity
   }

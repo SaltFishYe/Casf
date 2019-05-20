@@ -16,7 +16,7 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
 
   import sparkSession.implicits._
 
-  var forecast_axis: String = {
+  var prediction_axis: String = {
     if (axis.equals("x")) "y"
     else "x"
   }
@@ -25,7 +25,7 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
     * 返回两两对应的指定轴侧各向量的含全元素计算的模
     *
     * @param vectorMod 指定轴侧模
-    * @return Dataset[FactorMod] (vector1,vector2,mod1,mod2)
+    * @return Dataset[FactorMod] (vector0,vector1,mod1,mod2)
     */
   def genFactorAllElementMod(vectorMod: Dataset[VectorMod]): Dataset[FactorMod] = {
     val factorMod: Dataset[FactorMod] = vectorMod.agg(
@@ -37,22 +37,22 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
           val vector_mod_list = row.getAs[mutable.WrappedArray[String]](0)
           for (i <- 0 until vector_mod_list.size - 1) {
             val vector_mod1 = vector_mod_list(i).split(":")
-            val vector1 = vector_mod1(0)
+            val vector0 = vector_mod1(0)
             val mod1 = vector_mod1(1).toDouble
             for (k <- i + 1 until vector_mod_list.size) {
               val vector_mod2 = vector_mod_list(k).split(":")
-              val vector2 = vector_mod2(0)
+              val vector1 = vector_mod2(0)
               val mod2 = vector_mod2(1).toDouble
-              if (vector1.compareTo(vector2) > 0) {
-                modBuffer += ((vector1, vector2, mod1, mod2))
+              if (vector0.compareTo(vector1) > 0) {
+                modBuffer += ((vector0, vector1, mod1, mod2))
               } else {
-                modBuffer += ((vector2, vector1, mod2, mod1))
+                modBuffer += ((vector1, vector0, mod2, mod1))
               }
             }
           }
           modBuffer
         }
-      }.toDF("vector1", "vector2", "mod1", "mod2")
+      }.toDF("vector0", "vector1", "mod1", "mod2")
       .as[FactorMod]
     factorMod
   }
@@ -66,12 +66,12 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
     * @return
     */
   def genFactorMod(factorNormalizedValue: Dataset[FactorNormalizedValue]): Dataset[FactorMod] = {
-    val factorMod: Dataset[FactorMod] = factorNormalizedValue.groupBy($"vector1", $"vector2")
+    val factorMod: Dataset[FactorMod] = factorNormalizedValue.groupBy($"vector0", $"vector1")
       .agg(
         sqrt(sum(pow($"value1", 2))) as "mod1",
         sqrt(sum(pow($"value2", 2))) as "mod2"
       )
-      .toDF("vector1", "vector2", "mod1", "mod2")
+      .toDF("vector0", "vector1", "mod1", "mod2")
       .as[FactorMod]
 
     factorMod
@@ -95,7 +95,7 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
 
     val normalizedElement = tempNormalizedElement.select(
       matrixElement(axis),
-      matrixElement(forecast_axis),
+      matrixElement(prediction_axis),
       matrixElement("value") / maxValue("max_value").cast("Double") as "normalized_value")
       .as[NormalizedElement]
     normalizedElement
@@ -139,22 +139,22 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
           val vector_mod_list = row.getAs[mutable.WrappedArray[String]](0)
           for (i <- 0 until vector_mod_list.size - 1) {
             val vector_mod1 = vector_mod_list(i).split(":")
-            val vector1 = vector_mod1(0)
+            val vector0 = vector_mod1(0)
             val mod1 = vector_mod1(1).toDouble
             for (k <- i + 1 until vector_mod_list.size) {
               val vector_mod2 = vector_mod_list(k).split(":")
-              val vector2 = vector_mod2(0)
+              val vector1 = vector_mod2(0)
               val mod2 = vector_mod2(1).toDouble
-              if (vector1.compareTo(vector2) > 0) {
-                modBuffer += ((vector1, vector2, mod1, mod2))
+              if (vector0.compareTo(vector1) > 0) {
+                modBuffer += ((vector0, vector1, mod1, mod2))
               } else {
-                modBuffer += ((vector2, vector1, mod2, mod1))
+                modBuffer += ((vector1, vector0, mod2, mod1))
               }
             }
           }
           modBuffer
         }
-      }.toDF("vector1", "vector2", "mod1", "mod2")
+      }.toDF("vector0", "vector1", "mod1", "mod2")
       .as[FactorMod]
     factorMod
   }
@@ -163,39 +163,39 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
     * 返回两两对应的归一化元素值
     *
     * @param normalizedElement 归一化的向量元素
-    * @return Dataset[FactorNormalizedValue] (vector1,vector2,forecast_axis,value1,value2)
+    * @return Dataset[FactorNormalizedValue] (vector0,vector1,prediction_axis,value1,value2)
     */
   def genFactorNormalizedValue(normalizedElement: Dataset[NormalizedElement]): Dataset[FactorNormalizedValue] = {
 
     val factorNormalizedValue: Dataset[FactorNormalizedValue] = normalizedElement
-      .groupBy(forecast_axis)
+      .groupBy(prediction_axis)
       .agg(
         collect_list(concat_ws(":", normalizedElement(axis), normalizedElement("normalized_value"))) as "vector_value_list"
       )
       .flatMap {
         row => {
           var factorBuffer = ArrayBuffer[(String, String, String, Double, Double)]()
-          val forecast_axis = row.getString(0)
+          val prediction_axis = row.getString(0)
           val vector_value_list = row.getAs[mutable.WrappedArray[String]](1)
           for (i <- 0 until vector_value_list.size - 1) {
             val vector_value1 = vector_value_list(i).split(":")
-            val vector1 = vector_value1(0)
+            val vector0 = vector_value1(0)
             val value1 = vector_value1(1).toDouble
             for (k <- i + 1 until vector_value_list.size) {
               val vector_value2 = vector_value_list(k).split(":")
-              val vector2 = vector_value2(0)
+              val vector1 = vector_value2(0)
               val value2 = vector_value2(1).toDouble
-              if (vector1.compareTo(vector2) > 0) {
-                factorBuffer += ((vector1, vector2, forecast_axis, value1, value2))
+              if (vector0.compareTo(vector1) > 0) {
+                factorBuffer += ((vector0, vector1, prediction_axis, value1, value2))
               } else {
-                factorBuffer += ((vector2, vector1, forecast_axis, value2, value1))
+                factorBuffer += ((vector1, vector0, prediction_axis, value2, value1))
               }
             }
           }
           factorBuffer
         }
       }
-      .toDF("vector1", "vector2", "forecast_axis", "value1", "value2")
+      .toDF("vector0", "vector1", "prediction_axis", "value1", "value2")
       .as[FactorNormalizedValue]
 
     factorNormalizedValue
