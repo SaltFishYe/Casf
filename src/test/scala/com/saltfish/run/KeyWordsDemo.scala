@@ -100,7 +100,7 @@ object KeyWordsDemo {
 
     val word: Dataset[MatrixElement] = words1.unionAll(words2).unionAll(words3)
     val analyse = MatrixCosineAnalyse(sparkSession, axis = "y")
-    val matrixModel = analyse.simpleMatrixModel(word, isSparse = false)
+    val matrixModel = analyse.simpleFit(word, isSparse = false)
     matrixModel.allSimilarityValue.show()
     matrixModel.similarity(Array("article1", "article2")).show()
   }

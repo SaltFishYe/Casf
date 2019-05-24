@@ -215,7 +215,7 @@ case class MatrixCosineAnalyse(sparkSession: SparkSession,
     maxValue
   }
 
-  def simpleMatrixModel(matrixElement: Dataset[MatrixElement],
+  def simpleFit(matrixElement: Dataset[MatrixElement],
                         isSparse: Boolean = true): MatrixModel = {
     matrixElement.persist()
     val maxValue = genMaxValue(matrixElement)
